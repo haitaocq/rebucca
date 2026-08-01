@@ -134,7 +134,9 @@ jobs:
             -H "Content-Type: application/x-www-form-urlencoded" \
             -H "X-CSRFToken: ${TOKEN}" \
             --data "username=admin&password=admin888")
-          echo "$RESP" | grep -q "登录成功" && echo "✅ 登录验证通过" || { echo "登录失败: $RESP"; exit 1; }
+          # 响应为 JSON 且中文以 unicode 转义返回，按 code 字段判断（1000=成功）
+          echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('code')==1000 else 1)" \
+            && echo "✅ 登录验证通过" || { echo "登录失败: $RESP"; exit 1; }
 
           # 校验核心进程（Django + ZLMediaKit）
           echo "容器进程:"
