@@ -1,0 +1,144 @@
+# =============================================================================
+# Rebucca 容器自动构建工作流
+#
+# 触发:
+#   - push main        → 构建并推送 latest / <PROJECT_VERSION> / sha-<短哈希>
+#   - push v* tag      → 构建并推送 latest / <语义版本>（如 v1.003 → 1.003）
+#   - pull_request     → 仅构建 + 冒烟测试，不推送
+#   - workflow_dispatch→ 手动触发
+#
+# 产物: ghcr.io/haitaocq/rebucca（GitHub Container Registry，公开）
+# 架构: linux/amd64（ZLM 二进制仅 x86；arm 版已在 .dockerignore 排除）
+#
+# 使用:
+#   1. 无需配置 secret（使用内置 GITHUB_TOKEN）
+#   2. 部署侧（服务器）执行:
+#        echo $TOKEN | docker login ghcr.io -u haitaocq --password-stdin
+#        docker pull ghcr.io/haitaocq/rebucca:latest
+# =============================================================================
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "docker/**"
+      - ".dockerignore"
+      - "docker-compose.yml"
+      - "config.json"
+      - "framework/**"
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: ghcr.io/haitaocq/rebucca
+  VERSION_FILE: framework/settings.py
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 从 framework/settings.py 提取 PROJECT_VERSION（如 "1.002"）作为镜像标签
+      - name: Extract project version
+        id: version
+        run: |
+          V=$(sed -n 's/.*PROJECT_VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$VERSION_FILE")
+          echo "project=${V}" >> "$GITHUB_OUTPUT"
+          echo "项目版本: ${V}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 生成镜像标签
+      #   main push → latest, <版本号>, sha-<哈希>
+      #   v* tag   → latest, <语义版本>, sha-<哈希>
+      #   PR       → pr-<编号>（仅本地加载，不推送）
+      - name: Generate image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=${{ steps.version.outputs.project }},enable=${{ github.event_name == 'push' }}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          # PR 场景需要本地加载产物供冒烟测试；多平台不支持 load，故仅 amd64
+          load: ${{ github.event_name == 'pull_request' }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GHA 层缓存：FFmpeg 下载层与 pip 依赖层命中后无需重复下载
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 冒烟测试：跑容器 → 等 healthy → 真实登录 → 校验进程
+      - name: Smoke test
+        env:
+          SMOKE_IMG: ${{ env.IMAGE_NAME }}${{ github.event_name == 'pull_request' && format(':{0}', steps.meta.outputs.tags) || ':latest' }}
+        run: |
+          docker run -d --name smoke -p 10001:10001 "${SMOKE_IMG}"
+
+          # 等待容器进入 healthy（Django 就绪 + ZLM 托管）
+          st="starting"
+          for i in $(seq 1 90); do
+            st=$(docker inspect --format '{{.State.Health.Status}}' smoke 2>/dev/null || echo "missing")
+            [ "$st" = "healthy" ] && break
+            sleep 2
+          done
+          if [ "$st" != "healthy" ]; then
+            echo "容器未能进入 healthy（最终状态: $st），日志如下："
+            docker logs smoke 2>&1 | tail -50
+            exit 1
+          fi
+          echo "✅ 容器 healthy"
+
+          # 真实登录（含 CSRF token 握手）
+          rm -f /tmp/ck.txt /tmp/l.html
+          curl -sf -c /tmp/ck.txt http://127.0.0.1:10001/login -o /tmp/l.html
+          TOKEN=$(grep -o 'csrfmiddlewaretoken" value="[^"]*"' /tmp/l.html | head -1 | sed 's/.*value="//;s/"//')
+          RESP=$(curl -s -b /tmp/ck.txt -c /tmp/ck.txt -X POST http://127.0.0.1:10001/login \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "X-CSRFToken: ${TOKEN}" \
+            --data "username=admin&password=admin888")
+          echo "$RESP" | grep -q "登录成功" && echo "✅ 登录验证通过" || { echo "登录失败: $RESP"; exit 1; }
+
+          # 校验核心进程（Django + ZLMediaKit）
+          echo "容器进程:"
+          docker exec smoke sh -c "ps -e -o comm= | grep -E 'rebucca_zlm|runserver|supervisord' | sort -u"
+
+          docker rm -f smoke >/dev/null
+          echo "🎉 冒烟测试全部通过"
