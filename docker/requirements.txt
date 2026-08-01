@@ -1,0 +1,25 @@
+# Rebucca 容器运行时 Python 依赖
+# 精简版：仅保留 OnnxRuntime 推理引擎
+#   - 移除 Yolo-PyTorch（torch/torchvision/ultralytics，省 ~2GB）
+#   - 移除 OpenVINO（体积巨大，可选引擎）
+# 如需恢复 Yolo-PyTorch：在 Dockerfile 构建阶段补装 CPU 版 torch 并追加 ultralytics>=8.0.0
+# 如需恢复 OpenVINO：追加 openvino>=2024.0.0
+Django==5.0.4
+psutil==5.9.1
+requests==2.28.2
+xlrd==1.2.0
+openpyxl==3.1.2
+onvif_zeep==0.2.12
+pillow==9.5.0
+cryptography==46.0.4
+
+# 视频分析（OnnxRuntime 推理；headless 版去掉 GUI/高GUI 依赖，体积更小）
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+onnxruntime==1.19.2
+
+# 大模型（OpenAI 兼容 API）
+openai>=2.0.0
+
+# 进程管理
+supervisor>=4.2.0

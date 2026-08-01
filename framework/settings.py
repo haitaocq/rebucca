@@ -38,6 +38,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
+# 允许反向代理/云端转发域名通过 CSRF Origin 校验（如 Cloud Studio 等 IDE 转发域名）
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.cloudstudio.club",
+]
+
 # Application definition
 
 INSTALLED_APPS = [

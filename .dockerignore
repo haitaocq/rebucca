@@ -1,0 +1,28 @@
+# 版本控制 / IDE
+.git
+.gitignore
+.idea
+.vscode
+.qtcreator
+
+# Python 缓存
+__pycache__
+*.py[cod]
+*.so
+
+# 构建产物
+venv
+dist
+build
+*.spec
+rebucca.spec
+
+# 运行时日志
+log
+
+# 运行期产生的数据（通过数据卷挂载）
+static/storage
+
+# ZLM 仅保留 Linux x86 版，剔除 windows/arm 与系统自带动态库外的冗余
+zlm/bin.x86.windows10
+zlm/bin.arm.gcc9.4

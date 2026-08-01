@@ -1,0 +1,39 @@
+# Rebucca 容器编排（单镜像：应用 + ZLMediaKit + FFmpeg）
+# 用法: docker compose up -d --build
+# 访问: http://<host>:10001   默认账号 admin / admin888
+services:
+  rebucca:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rebucca:1.002
+    container_name: rebucca
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "10001:10001"      # Rebucca Web 管理
+      - "10002:10002"      # ZLMediaKit HTTP API
+      - "10554:10554"      # ZLMediaKit RTSP
+      - "10935:10935"      # ZLMediaKit RTMP
+      - "30001:30001"      # ZLMediaKit HTTP-FLV / HLS
+      - "15060:15060/udp"  # GB28181 SIP
+    volumes:
+      - rebucca_db:/app/db                 # sqlite 数据库
+      - rebucca_upload:/app/static/upload  # 模型权重上传
+      - rebucca_storage:/app/static/storage # 录像/报警快照
+      - rebucca_log:/app/log               # 运行日志
+    # OpenCV 与多进程共享内存需要较大 /dev/shm（默认仅 64MB）
+    shm_size: "1g"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:10001/login',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  rebucca_db:
+  rebucca_upload:
+  rebucca_storage:
+  rebucca_log:
