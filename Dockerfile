@@ -81,11 +81,24 @@ ENV PATH="/opt/venv/bin:$PATH" \
 RUN useradd --create-home --uid 1000 rebucca
 
 WORKDIR /app
-COPY --chown=1000:1000 . .
+# --exclude 排除 static/upload：权重后续单独 COPY 到数据目录，避免跨层重复
+COPY --chown=1000:1000 --exclude=static/upload . .
 
 # ZLM 工作目录可写（快照/转码输出）
 RUN mkdir -p /app/zlm/bin.x86.gcc9.4/www \
     && chown -R 1000:1000 /app/zlm/bin.x86.gcc9.4
+
+# 数据目录整合：db/upload/storage/log 统一收敛到 /app/data 单卷，
+# 原应用路径以软链保留（代码路径不变，写操作透明落入 /app/data）
+RUN mkdir -p /app/data/db /app/data/log /app/data/storage /app/data/upload \
+    && ln -s /app/data/upload /app/static/upload \
+    && ln -s /app/data/storage /app/static/storage \
+    && ln -s /app/data/db /app/db \
+    && ln -s /app/data/log /app/log \
+    && chown -R 1000:1000 /app/data
+
+# 预置模型权重仅写入数据目录一次（/app/static/upload 软链已指向它）
+COPY --chown=1000:1000 static/upload /app/data/upload
 
 COPY docker/entrypoint.sh /usr/local/bin/rebucca-entrypoint
 RUN chmod +x /usr/local/bin/rebucca-entrypoint
@@ -95,8 +108,8 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 # Web / ZLM 各端口 / SIP
 EXPOSE 10001 10002 10554 10935 30001 15060/udp
 
-# 持久化数据卷（db 为 sqlite 文件目录；upload 含预置演示权重）
-VOLUME ["/app/db", "/app/static/upload", "/app/static/storage", "/app/log"]
+# 持久化数据卷（db/upload/storage/log 统一收敛于此单卷）
+VOLUME ["/app/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:10001/login',timeout=3).status==200 else 1)"]
