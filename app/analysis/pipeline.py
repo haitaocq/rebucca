@@ -15,6 +15,7 @@
 """
 import collections
 import logging
+import math
 import os
 import threading
 import time
@@ -34,7 +35,6 @@ except Exception:
 
 # 快照保存目录（相对项目根/static/storage/snapshots/）
 _SNAPSHOT_DIRNAME = "snapshots"
-_SNAPSHOT_MAX_PER_MIN = 60  # 每路每分钟最多快照数，避免磁盘暴涨
 
 
 class CameraPipeline(object):
@@ -76,7 +76,10 @@ class CameraPipeline(object):
 
         self._motion = motion or MotionDetector()
         self._tracker = IoUTracker()
-        self._frame_source = FrameSource(rtsp_url, target_fps=target_fps)
+        # 解码频率对齐分析频率：解码是取帧链路最重的 CPU 开销，
+        # 检测频率 1s1帧 时无需按固定 5fps 解码（原实现浪费 80% 解码算力）
+        decode_fps = max(2, int(math.ceil(self.analyze_fps)))
+        self._frame_source = FrameSource(rtsp_url, target_fps=decode_fps)
         self._on_event = on_event or (lambda *a, **kw: None)
         self._on_track_snapshot = on_track_snapshot or (lambda *a, **kw: None)
         self.zone_polygons = zone_polygons or []
@@ -106,7 +109,6 @@ class CameraPipeline(object):
         self._last_h = 0
         self._last_frame = None     # 最近一帧（供事件触发时绘制快照）
         # 快照节流：每路每分钟上限
-        self._snapshot_times = collections.deque(maxlen=_SNAPSHOT_MAX_PER_MIN)
         self._llm_zone_last_ts = {}     # (zone_id, biz_id) -> ts
         self._llm_track_last_ts = {}    # (track_id, biz_id) -> ts
         self._loiter_fired = set()      # (track_id, zone_id, biz_id) 本次停留已报滞留（按算法独立）
@@ -118,6 +120,7 @@ class CameraPipeline(object):
         self._density_fired = set()     # (zone_id, biz_id) 本次密度已报警（按算法独立，目标数降回前不重复）
         self._direction_fired = set()   # (track_id, zone_id, biz_id) 方向报警去重
         self._area_alarm_last_ts = {}   # (track_id, zone_id, biz_id) -> ts 区域入侵持续报警节流
+        self._stream_alarm_last_ts = 0.0  # 每路全局报警节流：严格对齐检测频率，每周期最多 1 条
         # 离岗检测运行时状态
         self._zone_last_present_ts = {}  # (zone_id, biz_id) -> 最近一次区域内出现匹配目标的 ts
         self._absence_fired = set()      # (zone_id, biz_id) 本次离岗已报警（回岗后自动重新武装）
@@ -173,6 +176,7 @@ class CameraPipeline(object):
         self._density_fired = set()
         self._direction_fired = set()
         self._area_alarm_last_ts = {}
+        self._stream_alarm_last_ts = 0.0
         self._zone_last_present_ts = {}
         self._absence_fired = set()
         try:
@@ -186,6 +190,11 @@ class CameraPipeline(object):
             fps = 1.0
         self.analyze_fps = fps
         self._analyze_interval = 1.0 / fps
+        # 解码频率同步跟随，避免分析降频后仍在高频率解码
+        try:
+            self._frame_source.set_target_fps(fps)
+        except Exception:
+            pass
         logger.info("pipeline[%s] 分析频率调整为 %.3f fps (间隔 %.2fs)",
                     self.stream_code, fps, self._analyze_interval)
 
@@ -375,10 +384,27 @@ class CameraPipeline(object):
             self._check_llm_zones(frame, motion_boxes)
 
     def _emit_biz_alarm(self, event_type, frame, tr, zone_cfg, biz_rule, track_id, zone_id, box, now, **extra):
-        """仅业务算法规则命中时：截图、生成描述、上报报警事件。"""
+        """仅业务算法规则命中时：截图、生成描述、上报报警事件。
+
+        报警与快照原子化：快照保存失败（异常/磁盘故障）则不写该条报警，
+        保证报警列表里每条记录都有快照依据；下一帧规则仍命中会重试。
+
+        报警频率严格对齐检测频率（每路全局）：
+        检测频率 1 秒 1 帧 → 每路最多 1 秒 1 条报警。多目标/多规则同帧命中
+        不叠加，只报最先命中的一条，其余顺延到下个检测周期；
+        被节流的报警不消耗快照，避免浪费。
+        """
         if not biz_rule:
             return False
+        # 每路全局节流：与检测周期对齐（ detect_interval_sec，默认 1s）
+        interval = max(0.1, float((zone_cfg or {}).get("detect_interval_sec", 1) or 1))
+        if now - self._stream_alarm_last_ts < interval - 1e-6:
+            return False
         snap_path = self._save_alarm_snapshot(frame, tr, zone_cfg, event_type)
+        if not snap_path:
+            logger.warning("pipeline[%s] 快照保存失败，本条 %s 报警不写入（等待下帧重试）"
+                           % (self.stream_code, event_type))
+            return False
         evt = {
             "stream_id": self.stream_id,
             "stream_code": self.stream_code,
@@ -392,6 +418,7 @@ class CameraPipeline(object):
         }
         evt.update(extra)
         self._attach_alarm_context(evt, event_type, tr or {}, zone_cfg, biz_rule)
+        self._stream_alarm_last_ts = now
         self._on_event(evt)
         return True
 
@@ -582,7 +609,8 @@ class CameraPipeline(object):
             self._maybe_alert_line_count(frame, tr, zone_cfg, cr, direction, counts, tid, zid, box, now)
 
     def _fire_area_alarms(self, tr, zid, zone_cfg, prev_zones, frame, box, now, tid):
-        """区域入侵(AREA)：进入时报警，停留期间按 detect_interval_sec 持续重复报警。"""
+        """区域入侵(AREA)：进入时报警，停留期间按检测频率持续重复报警
+        （实际报警速率由 _emit_biz_alarm 的每路全局节流统一限定）。"""
         matched_rules = self._matched_rules(tr, zone_cfg)
         if not matched_rules:
             return False
@@ -642,6 +670,8 @@ class CameraPipeline(object):
         cur_state = {}
         # 统计每个区域内的目标数（用于 DENSITY 后处理）
         zone_density_count = {}  # zone_id -> count
+        # 区域 id -> 配置 映射（每帧建一次，避免循环内反复线性扫描）
+        zone_by_id = {z.get("id"): z for z in self.zone_polygons}
 
         for tr in active:
             tid = tr["track_id"]
@@ -658,7 +688,7 @@ class CameraPipeline(object):
             confirmed = set(prev & physical_in)
 
             for zid in physical_in:
-                zone_cfg = next((z for z in self.zone_polygons if z.get("id") == zid), None)
+                zone_cfg = zone_by_id.get(zid)
                 if not self._should_alarm_track_in_zone(tr, zone_cfg):
                     logger.debug(
                         "pipeline[%s] track %s in zone %s but no biz rule matched (label=%s algo=%s)",
@@ -696,7 +726,7 @@ class CameraPipeline(object):
                 ts = self._track_enter_ts.get((tid, zid))
                 if not ts:
                     continue
-                zone_cfg = next((z for z in self.zone_polygons if z.get("id") == zid), None)
+                zone_cfg = zone_by_id.get(zid)
                 matched_rules = self._matched_rules(tr, zone_cfg)
                 if not matched_rules:
                     continue
@@ -944,17 +974,16 @@ class CameraPipeline(object):
             return "storage/alarm/%s/%s/%s" % (code, day, fname)
 
     def _save_alarm_snapshot(self, frame, track, zone_cfg, event_type):
-        """绘制检测框 + 区域多边形 + 标签后保存 JPEG，返回相对 static/ 的路径；失败返回 ''"""
+        """绘制检测框 + 区域多边形 + 标签后保存 JPEG，返回相对 static/ 的路径；失败返回 ''
+
+        说明：报警频率本身已由业务规则的 detect_interval_sec / 冷却期节流，
+        快照不再单独限流，保证每条报警都有快照依据。
+        """
         if not _CV2_AVAILABLE or frame is None:
             if not _CV2_AVAILABLE:
                 logger.warning("pipeline[%s] OpenCV 不可用，无法保存报警快照" % self.stream_code)
             return ""
         now = time.time()
-        # 节流：60 秒窗口内超过上限则跳过
-        while self._snapshot_times and now - self._snapshot_times[0] > 60.0:
-            self._snapshot_times.popleft()
-        if len(self._snapshot_times) >= _SNAPSHOT_MAX_PER_MIN:
-            return ""
         try:
             import numpy as np
             img = frame.copy()
@@ -968,29 +997,42 @@ class CameraPipeline(object):
                     cv2.fillPoly(overlay, [pts], (22, 159, 133))
                     cv2.addWeighted(overlay, 0.18, img, 0.82, 0, img)
                     cv2.polylines(img, [pts], True, (22, 159, 133), 2)
-            # 画检测框 + 标签（区域级报警如密度/离岗无目标框，跳过绘制）
+            # 画检测框 + 标签（区域级报警如密度/离岗无目标框，跳过绘制；
+            # 标签走 DrawUtils，支持中文类别名，cv2.putText 会把中文画成 ???）
             box = track.get("box") or [0, 0, 0, 0]
             x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
             if x2 > x1 and y2 > y1:
+                from app.utils.DrawUtils import draw_box_label
                 cv2.rectangle(img, (x1, y1), (x2, y2), (220, 38, 38), 2)
                 label = str(track.get("label") or "")
                 score = track.get("score")
                 txt = label + (" %.2f" % score if isinstance(score, (int, float)) else "")
-                (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                ty = max(0, y1 - 6)
-                cv2.rectangle(img, (x1, max(0, ty - th - 4)), (x1 + tw + 6, ty + 2), (220, 38, 38), -1)
-                cv2.putText(img, txt, (x1 + 3, ty - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-            # 事件类型角标
-            tag = event_type == "loiter" and "LOITER" or "ALARM"
-            cv2.rectangle(img, (w - 90, 6), (w - 6, 26), (220, 38, 38), -1)
-            cv2.putText(img, tag, (w - 84, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                img = draw_box_label(img, txt, [x1, y1, x2, y2], color=(220, 38, 38), font_px=18)
+            # 事件类型角标（中文）
+            tag = "滞留" if event_type == "loiter" else "报警"
+            from app.utils.DrawUtils import put_text
+            img = put_text(img, tag, (w - 64, 6), color=(255, 255, 255), font_px=18,
+                           bg=(220, 38, 38), padding=4)
             fname = "%s_%s_%d_%s.jpg" % (self.stream_id, event_type, int(now * 1000), track.get("track_id", "x"))
             fpath = os.path.join(self._alarm_snapshot_dir(), fname)
-            cv2.imwrite(fpath, img)
-            self._snapshot_times.append(now)
+            ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            if not ok:
+                logger.warning("pipeline[%s] 快照 JPEG 编码失败: %s" % (self.stream_code, fname))
+                return ""
+            buf.tofile(fpath)
             return self._alarm_rel_path(fname)
         except Exception as e:
             logger.warning("pipeline[%s] 保存快照失败: %s" % (self.stream_code, str(e)))
+            # 兜底：带框绘制失败时保存原始帧，仍保证报警有快照依据
+            try:
+                fname = "%s_%s_%d_raw.jpg" % (self.stream_id, event_type, int(time.time() * 1000))
+                fpath = os.path.join(self._alarm_snapshot_dir(), fname)
+                ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if ok:
+                    buf.tofile(fpath)
+                    return self._alarm_rel_path(fname)
+            except Exception as e2:
+                logger.warning("pipeline[%s] 兑底原始帧快照也失败: %s" % (self.stream_code, str(e2)))
             return ""
 
     @staticmethod

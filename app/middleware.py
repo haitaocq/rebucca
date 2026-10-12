@@ -17,6 +17,7 @@ AUTH_WHITELIST_PREFIXES = (
     '/nvr/openSnap',
     '/user/openCaptcha',
     '/static/',
+    '/favicon.ico',  # 浏览器标签页图标（每个页面都会自动请求）
 )
 
 # 需 Safe 请求头鉴权的 open API（供 ZLM/内部服务调用，不暴露给浏览器）

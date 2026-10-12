@@ -98,18 +98,20 @@ class AlgorithmModel(models.Model):
         (ENGINE_OPENVINO, 'OpenVINO'),
     )
 
-    # 算法类型：YOLO 检测系列 + ReID 特征系列
+    # 算法类型：YOLO 检测系列 + ReID 特征系列 + D-FINE
     ALGO_TYPE_YOLO5 = 'yolo5'
     ALGO_TYPE_YOLO8 = 'yolo8'
     ALGO_TYPE_YOLO11 = 'yolo11'
     ALGO_TYPE_YOLO26 = 'yolo26'
     ALGO_TYPE_OSNET = 'osnet'
+    ALGO_TYPE_DFINE = 'dfine'
     ALGO_TYPE_CHOICES = (
         (ALGO_TYPE_YOLO5, 'YOLOv5'),
         (ALGO_TYPE_YOLO8, 'YOLOv8'),
         (ALGO_TYPE_YOLO11, 'YOLOv11'),
         (ALGO_TYPE_YOLO26, 'YOLO26'),
         (ALGO_TYPE_OSNET, 'OSNet ReID'),
+        (ALGO_TYPE_DFINE, 'D-FINE'),
     )
 
     # 任务类型

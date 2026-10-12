@@ -50,6 +50,27 @@ class AppConfig(AppConfig):
             import logging
             logging.getLogger("app.bootstrap").warning("schema upgrade: %s", e)
 
+        try:
+            from app.utils.seed_defaults import ensure_default_dfine_models
+            ensure_default_dfine_models()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("seed_default_dfine_models: %s", e)
+
+        try:
+            from app.utils.seed_defaults import upgrade_dfine_labels_to_chinese
+            upgrade_dfine_labels_to_chinese()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("upgrade_dfine_labels_to_chinese: %s", e)
+
+        try:
+            from app.utils.seed_defaults import upgrade_dfine_biz_target_labels
+            upgrade_dfine_biz_target_labels()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("upgrade_dfine_biz_target_labels: %s", e)
+
         # 仅在 runserver 的子进程（RUN_MAIN=true）启动后台服务，
         # 避免 reloader 主进程重复初始化 AnalysisManager / 推理池。
         if not is_main_worker:

@@ -4,6 +4,7 @@
 # github开源地址：https://github.com/yuturuishi/rebucca
 """帧源：从 ZLMediaKit 输出的 RTSP 流取帧（纯 Python · OpenCV）"""
 import logging
+import math
 import time
 
 logger = logging.getLogger("analysis.frames")
@@ -72,6 +73,23 @@ class FrameSource(object):
             self.rtsp_url, self._src_fps, self.target_fps, self._frame_skip,
         )
         return True
+
+    def set_target_fps(self, fps):
+        """运行时调整解码频率（grab 跳帧数随之重算）。
+
+        解码是取帧链路最重的 CPU 开销；分析频率调低时同步调低解码频率，
+        可大幅减少无效解码（如检测频率 1s1帧 时，解码从 5fps 降到 1fps）。
+        """
+        try:
+            fps = max(1, int(math.ceil(float(fps))))
+        except Exception:
+            return
+        if fps == self.target_fps:
+            return
+        self.target_fps = fps
+        self._frame_skip = max(0, int(self._src_fps / self.target_fps) - 1)
+        logger.info("FrameSource.set_target_fps(%d) skip=%d url=%s",
+                    self.target_fps, self._frame_skip, self.rtsp_url)
 
     def read(self):
         """返回 (ok, frame_bgr)；失败时进入重连流程"""

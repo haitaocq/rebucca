@@ -43,7 +43,7 @@ github开源地址：https://github.com/yuturuishi/rebucca
 </div>
 
 <!-- ============== 资源监控 + 系统信息 ============== -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="resp-2col">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" class="resp-2col">
 
     <!-- 资源监控 -->
     <div class="card">
@@ -113,10 +113,9 @@ github开源地址：https://github.com/yuturuishi/rebucca
             </div>
         </div>
     </div>
-</div>
 
-<!-- ============== 流媒体服务 ZLM ============== -->
-<div class="card" style="margin-top:16px" id="zlmCard">
+    <!-- ============== 流媒体服务 ZLM ============== -->
+    <div class="card" id="zlmCard">
     <div class="card-header">
         <span class="card-title">{{ T.dash_zlm_title|default:'流媒体服务' }}</span>
         <span class="card-extra" id="zlmStatusBadge">{{ T.dash_zlm_checking|default:'检测中…' }}</span>
@@ -132,7 +131,7 @@ github开源地址：https://github.com/yuturuishi/rebucca
 </div>
 
 <!-- ============== 日志与刷新 ============== -->
-<div class="card" style="margin-top:16px">
+    <div class="card">
     <div class="card-header">
         <span class="card-title">{{ T.card_log_tools|default:'日志与刷新' }}</span>
     </div>
@@ -141,10 +140,13 @@ github开源地址：https://github.com/yuturuishi/rebucca
             <button type="button" class="btn btn-sm" id="btnExportLogs" onclick="f_openExportLogs()">{{ T.btn_export_logs|default:'导出日志' }}</button>
             <span class="quick-action-loading" id="exportLogsLoading">{{ T.processing|default:'处理中...' }}</span>
             <button type="button" class="btn btn-sm btn-ghost" onclick="refreshDashboard()">{{ T.btn_refresh_symbol|default:'↻ 刷新' }}</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="btnRestartApp" style="color:#dc2626;border-color:#fca5a5" onclick="f_confirmRestartApp()">⏻ {{ T.btn_restart_app|default:'重启软件' }}</button>
+            <span class="quick-action-loading" id="restartAppLoading"></span>
         </div>
     </div>
 </div>
-</div>
+</div><!-- /resp-2col -->
+</div><!-- /dash-page -->
 
 <!-- ============== 版本检测弹窗 ============== -->
 <div id="checkVersionDialog" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center">
@@ -165,20 +167,24 @@ github开源地址：https://github.com/yuturuishi/rebucca
 
 {% block extra_head %}
 <style>
+/* ========== 一屏紧凑布局 ========== */
 .dash-page { max-width: 1400px; margin: 0 auto; }
+.dash-page .card-header { padding: 10px 16px; }
+.dash-page .card-body { padding: 12px 16px; }
+.dash-page .info-row { padding: 6px 0; }
 
 /* ========== 统计卡（统一灰） ========== */
 .stat-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 16px;
+    gap: 12px;
+    margin-bottom: 12px;
 }
 .stat-card {
     background: #fff;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 18px 20px;
+    padding: 10px 16px;
     transition: all .15s;
     color: inherit;
     text-decoration: none;
@@ -190,18 +196,18 @@ github开源地址：https://github.com/yuturuishi/rebucca
     box-shadow: 0 4px 12px rgba(22,159,133,.08);
 }
 .stat-label {
-    font-size: 13px;
+    font-size: 12px;
     color: #6b7280;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
 }
 .stat-value {
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 600;
     color: #1f2937;
     line-height: 1.2;
     font-family: 'Consolas', 'Courier New', monospace;
 }
-.stat-value-md { font-size: 18px; letter-spacing: .3px; }
+.stat-value-md { font-size: 16px; letter-spacing: .3px; }
 .stat-unit {
     font-size: 12px;
     color: #9ca3af;
@@ -209,7 +215,7 @@ github开源地址：https://github.com/yuturuishi/rebucca
     margin-left: 4px;
 }
 .stat-foot {
-    margin-top: 8px;
+    margin-top: 3px;
     font-size: 12px;
     color: #9ca3af;
 }
@@ -222,12 +228,12 @@ github开源地址：https://github.com/yuturuishi/rebucca
 }
 
 /* ========== 资源监控 ========== */
-.metric { margin-bottom: 18px; }
+.metric { margin-bottom: 10px; }
 .metric:last-child { margin-bottom: 0; }
 .metric-head {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 .metric-name {
     font-size: 13px;
@@ -594,6 +600,65 @@ function f_openExportLogs() {
         loading.classList.remove('show');
         showToast(_t('msg_unknown_error', '失败'), 'error');
     });
+}
+
+/* ========== 重启软件（2026-10-11 新增） ========== */
+function f_confirmRestartApp() {
+    if (!confirm(_t('restart_app_confirm', '确定要重启软件吗？\n\n· 重启期间服务将短暂不可用（约 10~30 秒）\n· 运行中的布控分析会停止，重启后需手动重新启动\n\n点击「确定」开始重启。'))) {
+        return;
+    }
+    var btn = document.getElementById('btnRestartApp');
+    var loading = document.getElementById('restartAppLoading');
+    btn.disabled = true;
+    loading.textContent = _t('processing', '处理中...');
+    loading.classList.add('show');
+    fetch('/system/openRestart', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': (document.querySelector('meta[name="csrf-token"]') || {}).content || ''
+        }
+    }).then(function(res) { return res.json(); }).then(function(res) {
+        if (1000 === res.code) {
+            f_waitRestartAndReload(0);
+        } else {
+            btn.disabled = false;
+            loading.classList.remove('show');
+            showToast(res.msg || _t('msg_unknown_error', '失败'), 'error');
+        }
+    }).catch(function() {
+        // 请求异常也继续轮询（服务可能已开始重启）
+        f_waitRestartAndReload(0);
+    });
+}
+
+function f_waitRestartAndReload(n) {
+    var tip = document.getElementById('restartAppLoading');
+    var showTip = function(txt) {
+        if (tip) { tip.textContent = txt; tip.classList.add('show'); }
+    };
+    showTip(_t('restart_app_waiting', '软件重启中，请稍候…'));
+    // 服务已停止响应：切换到轮询恢复
+    var poll = function(attempt) {
+        fetch('/', { cache: 'no-store' }).then(function(res) {
+            if (res.ok) {
+                showTip(_t('restart_app_done', '重启完成，正在刷新…'));
+                setTimeout(function() { location.reload(); }, 600);
+            } else if (attempt < 60) {
+                setTimeout(function() { poll(attempt + 1); }, 2000);
+            } else {
+                showTip(_t('restart_app_timeout', '等待超时，请手动刷新页面'));
+            }
+        }).catch(function() {
+            if (attempt < 60) {
+                setTimeout(function() { poll(attempt + 1); }, 2000);
+            } else {
+                showTip(_t('restart_app_timeout', '等待超时，请手动刷新页面'));
+            }
+        });
+    };
+    // 先给服务 2 秒退出时间，再开始轮询
+    setTimeout(function() { poll(n); }, 2000);
 }
 
 /* ========== 定时刷新（系统信息 10s，运行时长 1s） ========== */

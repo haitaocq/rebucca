@@ -17,6 +17,7 @@ from app.analysis.engines.yolo_pytorch_engine import YoloPytorchEngine
 from app.analysis.engines.onnx_engine import OnnxEngine
 from app.analysis.engines.openvino_engine import OpenVinoEngine
 from app.analysis.engines.reid_onnx_engine import ReidOnnxEngine
+from app.analysis.engines.dfine_engine import DfineEngine
 
 logger = logging.getLogger("analysis.engines.factory")
 
@@ -86,6 +87,18 @@ class EngineFactory(object):
     @staticmethod
     def create(engine_name, **kwargs):
         task_type = (kwargs.get("task_type") or "detect").lower()
+        algo_type = (kwargs.get("algorithm_type") or "yolo8").lower()
+        # D-FINE：复用 onnxruntime / openvino 两个 Python 推理引擎名，按算法类型路由到专用引擎
+        if algo_type == "dfine":
+            eng = (engine_name or "").lower()
+            if eng in ("onnxruntime", "onnx"):
+                backend = "onnxruntime"
+            elif eng in ("openvino",):
+                backend = "openvino"
+            else:
+                raise EngineNotAvailableError(
+                    "D-FINE 仅支持 onnxruntime / openvino 推理引擎，收到: %s" % engine_name)
+            return DfineEngine(backend=backend, **kwargs)
         if task_type == "reid":
             eng = (engine_name or "").lower()
             if eng not in ("onnxruntime", "onnx"):
