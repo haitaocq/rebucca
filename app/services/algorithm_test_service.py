@@ -1,9 +1,7 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 """算法离线测试：异步任务 + 进度 + 渲染输出（临时文件存 storage/temp）"""
 import os
 import re
@@ -242,10 +240,9 @@ def draw_detections(frame_bgr, detections, task_type="detect"):
         score = det.get("score")
         txt = label + (" %.2f" % score if isinstance(score, (int, float)) else "")
         if txt.strip():
-            (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
-            ty = max(0, y1 - 6)
-            cv2.rectangle(img, (x1, max(0, ty - th - 4)), (x1 + tw + 8, ty + 2), color, -1)
-            cv2.putText(img, txt, (x1 + 4, ty - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+            # 标签走 DrawUtils，支持中文类别名
+            from app.utils.DrawUtils import draw_box_label
+            img = draw_box_label(img, txt, [x1, y1, x2, y2], color=color, font_px=20)
         kpts = det.get("keypoints")
         if kpts:
             for kp in kpts:
@@ -253,10 +250,13 @@ def draw_detections(frame_bgr, detections, task_type="detect"):
                     cv2.circle(img, (int(kp[0]), int(kp[1])), 3, color, -1)
     if task_type == "classify" and detections:
         y = 28
+        from app.utils.DrawUtils import put_text
         for i, det in enumerate(detections[:8]):
             txt = "%s %.2f" % (det.get("label", ""), float(det.get("score") or 0))
-            cv2.putText(img, txt, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(img, txt, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, _color_for_label(det.get("label"), i), 1, cv2.LINE_AA)
+            img = put_text(img, txt, (12, y - 20), color=(255, 255, 255), font_px=22,
+                           bg=(int(_color_for_label(det.get("label"), i)[0]),
+                               int(_color_for_label(det.get("label"), i)[1]),
+                               int(_color_for_label(det.get("label"), i)[2])))
             y += 26
     cv2.rectangle(img, (w - 130, 6), (w - 6, 28), (22, 159, 133), -1)
     cv2.putText(img, "ALGO TEST", (w - 122, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
@@ -429,7 +429,8 @@ def _draw_reid_frame(frame_bgr, tracker, active_ids):
         color = (0, 200, 80) if tr.hits >= 3 else (0, 180, 255)
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
         txt = "id=%d %s %.2f" % (tid, tr.label, float(tr.score or 0))
-        cv2.putText(img, txt, (x1, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA)
+        from app.utils.DrawUtils import draw_box_label
+        img = draw_box_label(img, txt, [x1, max(0, y1 - 30), x2, y1], color=color, font_px=18)
     h, w = img.shape[:2]
     cv2.rectangle(img, (w - 130, 6), (w - 6, 28), (22, 159, 133), -1)
     cv2.putText(img, "REID TEST", (w - 122, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)

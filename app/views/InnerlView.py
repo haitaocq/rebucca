@@ -1,9 +1,7 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 import os
 import time
 import threading
@@ -328,17 +326,6 @@ def t_init_thread():
 
         ret, msg = GlobalUtils.addAllStreamProxy(lang=lang)
         g_logger.info("autoAddStreamProxy ret=%d,msg=%s" % (ret,msg))
-
-    i = 0
-    report_count = 0
-    while True:
-        if i > 0 and i % 480 == 0:
-            report_count += 1
-            CheckServerUtils.reportHeart(report_count=report_count, lang=lang)
-
-        time.sleep(10)
-
-        i += 1
 
 t = threading.Thread(target=t_init_thread)
 t.daemon = True

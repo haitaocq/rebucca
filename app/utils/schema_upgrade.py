@@ -1,4 +1,3 @@
-# 作者：北小菜
 """轻量 SQLite 列升级（无 Django migrations 时使用）"""
 import logging
 
@@ -18,6 +17,24 @@ def ensure_biz_algorithm_line_count_columns():
         ("forward_count_threshold", "INTEGER NOT NULL DEFAULT 0"),
         ("reverse_count_threshold", "INTEGER NOT NULL DEFAULT 0"),
         ("detector_model_id", "INTEGER NULL"),
+    )
+    with connection.cursor() as cur:
+        existing = _table_columns(cur, table)
+        for col, decl in adds:
+            if col in existing:
+                continue
+            sql = "ALTER TABLE %s ADD COLUMN %s %s" % (table, col, decl)
+            cur.execute(sql)
+            logger.info("schema upgrade: %s", sql)
+
+
+def ensure_zone_absence_threshold_column():
+    """v1.005：av_zone 增加 absence_threshold（离岗检测阈值，秒），老库自动补列"""
+    from django.db import connection
+
+    table = "av_zone"
+    adds = (
+        ("absence_threshold", "INTEGER NOT NULL DEFAULT 0"),
     )
     with connection.cursor() as cur:
         existing = _table_columns(cur, table)

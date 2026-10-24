@@ -1,13 +1,15 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 import json
 import shutil
 import os
+import sys
+import time
 import threading
+import subprocess
+import tempfile
 from app.views.ViewsBase import *
 from django.shortcuts import render
 from app.utils.OSSystem import OSSystem
@@ -325,3 +327,88 @@ def api_openExportLogs(request):
     }
     g_logger.info("SystemView.openExportLogs() res:%s" % str(res))
     return f_responseJson(res)
+
+
+def api_openRestart(request):
+    """重启服务软件（2026-10-11 新增）。
+
+    流程：
+    1. 先分离拉起一个守护进程（server_restarter.py），负责在端口下线后观察
+       服务是否自行恢复，超时未恢复则按当前启动命令重新拉起；
+    2. 本进程延迟 ~1 秒退出：先干净停掉所有布控分析子进程，再以退出码 3 结束
+       （runserver autoreloader 约定：子进程退出码 3 → 父进程自动重载工作进程）。
+    浏览器端收到响应后轮询首页，服务恢复即自动刷新。
+    """
+    ret = False
+    msg = LANG_VIEWS_T(request, "msg_unknown_error")
+    if request.method == 'POST':
+        __check_ret, __check_msg = f_checkRequestSafe(request)
+        if __check_ret:
+            try:
+                if getattr(sys, "frozen", False):
+                    return f_responseJson({"code": 0, "msg": "打包运行模式下请在服务器上手动重启软件"})
+
+                # 1) 解析服务端口（优先当前请求 host，兜底 10001）
+                port = 0
+                try:
+                    host = request.get_host()
+                    if ":" in host:
+                        port = int(host.rsplit(":", 1)[1])
+                except Exception:
+                    port = 0
+                if not port:
+                    port = 10001
+
+                # 2) 还原当前启动命令（python manage.py runserver ...）
+                argv = [sys.executable] + [str(a) for a in sys.argv]
+
+                # 3) 启动规格写临时文件（避免命令行转义问题）
+                spec = {"argv": argv, "cwd": str(BASE_DIR)}
+                fd, spec_path = tempfile.mkstemp(prefix="rebucca_restart_", suffix=".json")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(spec, f)
+
+                # 4) 分离拉起守护进程：等下线(30s) → 观察自恢复(25s) → 未恢复则拉起
+                helper = os.path.join(str(BASE_DIR), "app", "utils", "server_restarter.py")
+                popen_kwargs = {
+                    "cwd": str(BASE_DIR),
+                    "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL,
+                    "close_fds": True,
+                }
+                if os.name == "nt":
+                    popen_kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
+                else:
+                    popen_kwargs["start_new_session"] = True
+                subprocess.Popen(
+                    [sys.executable, helper, str(port), "30", "25", spec_path],
+                    **popen_kwargs
+                )
+
+                # 5) 延迟退出：先停干净布控子进程（防孤儿占资源），再 os._exit(3)
+                def _do_exit():
+                    try:
+                        from app.analysis.manager import AnalysisManager
+                        m = AnalysisManager()
+                        for sid in list(m.list_running()):
+                            try:
+                                m.stop(sid)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    time.sleep(0.3)
+                    os._exit(3)
+
+                threading.Timer(1.0, _do_exit).start()
+                ret = True
+                msg = LANG_VIEWS_T(request, "msg_success")
+                g_logger.info("SystemView.api_openRestart() 重启已受理 port=%s argv=%s" % (port, argv))
+            except Exception as e:
+                msg = str(e)
+                g_logger.error("SystemView.api_openRestart() error:%s" % str(e))
+        else:
+            msg = __check_msg
+    else:
+        msg = LANG_VIEWS_T(request, "msg_method_not_supported")
+    return f_responseJson({"code": 1000 if ret else 0, "msg": msg})

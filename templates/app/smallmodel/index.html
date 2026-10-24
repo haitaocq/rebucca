@@ -1,10 +1,8 @@
 <!--
-作者：北小菜
 官网：https://www.yuturuishi.com
-微信：bilibili_bxc
-哔哩哔哩主页：https://space.bilibili.com/487906612
-gitee地址：https://gitee.com/Vanishi/rebucca
-github地址：https://github.com/beixiaocai/rebucca
+微信：yuturuishi
+gitee开源地址：https://gitee.com/yuturuishi/rebucca
+github开源地址：https://github.com/yuturuishi/rebucca
 -->
 
 {% extends "app/base.html" %}
@@ -117,20 +115,60 @@ github地址：https://github.com/beixiaocai/rebucca
 .tip-bar .tip-list li{margin:2px 0;}
 .tip-bar .tip-close{flex-shrink:0;background:none;border:none;color:inherit;cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;opacity:.6;}
 .tip-bar .tip-close:hover{opacity:1;}
+
+/* 顶部模型检查结果（可折叠面板） */
+.check-panel{display:none;margin:0 0 12px;border-radius:10px;font-size:13px;line-height:1.6;overflow:hidden;}
+.check-panel.ok,.check-panel.warn,.check-panel.info{display:block;}
+.check-panel.warn{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;}
+.check-panel.info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;}
+.check-panel.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;}
+.check-panel .check-head{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;user-select:none;}
+.check-panel .check-icon{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+.check-panel.warn .check-icon{background:#fee2e2;color:#991b1b;}
+.check-panel.info .check-icon{background:#dbeafe;color:#1e40af;}
+.check-panel.ok .check-icon{background:#d1fae5;color:#065f46;}
+.check-panel .check-title{font-weight:600;}
+.check-panel .check-summary{flex:1;font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;}
+.check-panel .check-arrow{flex-shrink:0;font-size:12px;opacity:.7;}
+.check-panel .check-detail{padding:2px 16px 12px 44px;font-size:12px;}
+.check-panel .tip-list{margin:6px 0 0;padding-left:16px;}
+.check-panel .tip-list li{margin:2px 0;}
+
+/* ytstudio 开源训练框架推广条（置顶简洁版） */
+.ys-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;padding:11px 16px;border-radius:10px;background:#fff;border:1px solid #e2e8f0;font-size:13px;line-height:1.5;}
+.ys-banner .ys-badge{flex-shrink:0;padding:2px 10px;border-radius:999px;border:1px solid #169F85;color:#169F85;font-size:12px;font-weight:600;letter-spacing:2px;}
+.ys-banner .ys-title{flex-shrink:0;font-weight:700;color:#1f2937;}
+.ys-banner .ys-desc{color:#6b7280;font-size:12px;min-width:0;}
+.ys-banner .ys-spacer{flex:1;}
+.ys-banner .ys-link{flex-shrink:0;display:inline-flex;align-items:center;padding:5px 14px;border:1px solid #e2e8f0;border-radius:8px;color:#374151;font-size:12px;font-weight:600;text-decoration:none;background:#fff;transition:all .15s;}
+.ys-banner .ys-link:hover{color:#169F85;border-color:#169F85;background:#f0f9f6;}
+@media (max-width:900px){.ys-banner .ys-spacer{display:none;}}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="alg-page">
-  <!-- 顶部模型文件检查提示条 -->
-  <div class="tip-bar" id="modelTipBar">
-    <div class="tip-icon" id="tipIcon">!</div>
-    <div class="tip-body">
-      <div class="tip-title" id="tipTitle"></div>
-      <div id="tipText"></div>
-      <ul class="tip-list" id="tipList" style="display:none;"></ul>
+  <!-- ytstudio 模型训练框架（开源项目，置顶） -->
+  <div class="ys-banner">
+    <span class="ys-badge">开源</span>
+    <span class="ys-title">ytstudio · 模型训练框架</span>
+    <span class="ys-desc">YOLO 系列 / D-FINE 等算法一站式训练、评估与导出（ONNX / OpenVINO），训练产物可直接上传至本页使用。</span>
+    <span class="ys-spacer"></span>
+    <a class="ys-link" href="https://gitee.com/yuturuishi/ytstudio" target="_blank" rel="noopener">Gitee ↗</a>
+    <a class="ys-link" href="https://github.com/yuturuishi/ytstudio" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+  <!-- 顶部模型检查结果（默认折叠，点击展开/收起） -->
+  <div class="check-panel" id="modelTipBar">
+    <div class="check-head" onclick="toggleCheckPanel()">
+      <span class="check-icon" id="tipIcon">✓</span>
+      <span class="check-title" id="tipTitle">模型检查结果</span>
+      <span class="check-summary" id="tipSummary"></span>
+      <span class="check-arrow" id="tipArrow">▾</span>
     </div>
-    <button type="button" class="tip-close" onclick="document.getElementById('modelTipBar').classList.remove('show')">&times;</button>
+    <div class="check-detail" id="tipDetail" style="display:none">
+      <div id="tipText"></div>
+      <ul class="tip-list" id="tipList" style="display:block;"></ul>
+    </div>
   </div>
   <div class="alg-card">
     <div class="alg-head">
@@ -175,6 +213,7 @@ github地址：https://github.com/beixiaocai/rebucca
       <div class="pagination" id="pagination"></div>
     </div>
   </div>
+
 </div>
 
 <!-- 新增/编辑模态 -->
@@ -198,6 +237,7 @@ github地址：https://github.com/beixiaocai/rebucca
             <option value="yolo8">YOLOv8</option>
             <option value="yolo11">YOLOv11</option>
             <option value="yolo26">YOLO26</option>
+            <option value="dfine">D-FINE</option>
             <option value="osnet">OSNet ReID</option>
           </select>
         </div>
@@ -299,6 +339,15 @@ var g_currentPage = 1;
 var g_pageSize = 10;
 
 // 进入页面时检查所有小模型文件是否存在，同时列出就绪与缺失模型，便于排查
+// 进入页面时检查所有小模型文件是否存在（默认折叠，仅一行摘要；失败时默认展开）
+function toggleCheckPanel(){
+  var d = document.getElementById('tipDetail');
+  var a = document.getElementById('tipArrow');
+  if(!d) return;
+  var open = d.style.display !== 'none';
+  d.style.display = open ? 'none' : 'block';
+  if(a) a.textContent = open ? '\u25be' : '\u25b4';
+}
 function checkModels(){
   Api.get('/algorithm/openCheckModels').then(function(res){
     var bar = document.getElementById('modelTipBar');
@@ -310,19 +359,8 @@ function checkModels(){
     var total = d.total || 0;
     var ok = d.ok_count || 0;
     var fail = missing.length;
-    if(total===0){
-      bar.className = 'tip-bar show info';
-      document.getElementById('tipIcon').textContent = 'i';
-      document.getElementById('tipTitle').textContent = '暂无小模型';
-      document.getElementById('tipText').textContent = '当前没有任何小模型，请点击右上角「+ 添加小模型」并上传模型文件。';
-      document.getElementById('tipList').style.display = 'none';
-      return;
-    }
-    // 统计文案：明确说明成功多少、失败多少
-    var statText = '共 '+total+' 个已启用小模型：成功 '+ok+' 个，失败 '+fail+' 个。';
     var list = document.getElementById('tipList');
     var listHtml = '';
-    // 成功列表（绿色）
     if(okList.length){
       listHtml += '<li style="color:#065f46;"><b>✓ 成功 ('+okList.length+')</b>';
       listHtml += '<ul style="margin:4px 0 6px;padding-left:16px;">';
@@ -331,7 +369,6 @@ function checkModels(){
       });
       listHtml += '</ul></li>';
     }
-    // 失败列表（红色）
     if(missing.length){
       listHtml += '<li style="color:#991b1b;"><b>✗ 失败 ('+missing.length+')</b>';
       listHtml += '<ul style="margin:4px 0 6px;padding-left:16px;">';
@@ -340,29 +377,36 @@ function checkModels(){
       });
       listHtml += '</ul></li>';
     }
+    if(listHtml){ list.innerHTML = listHtml; } else { list.style.display = 'none'; }
+    var statText = '共 '+total+' 个已启用小模型：成功 '+ok+' 个，失败 '+fail+' 个。';
+    if(total===0){
+      bar.className = 'check-panel info';
+      document.getElementById('tipIcon').textContent = 'i';
+      document.getElementById('tipTitle').textContent = '模型检查结果';
+      document.getElementById('tipSummary').textContent = '暂无小模型';
+      document.getElementById('tipText').textContent = '当前没有任何小模型，请点击右上角「+ 添加小模型」并上传模型文件。';
+      return;
+    }
     if(missing.length===0){
-      // 全部成功
-      bar.className = 'tip-bar show ok';
+      // 全部通过：默认折叠，只显示一行摘要
+      bar.className = 'check-panel ok';
       document.getElementById('tipIcon').textContent = '✓';
-      document.getElementById('tipTitle').textContent = '模型文件检查通过';
-      document.getElementById('tipText').textContent = statText + '全部小模型的模型文件均已就绪。';
+      document.getElementById('tipTitle').textContent = '模型检查结果';
+      document.getElementById('tipSummary').textContent = '全部就绪 · '+statText;
+      document.getElementById('tipText').textContent = '全部小模型的模型文件均已就绪。';
     } else {
-      // 存在失败
-      bar.className = 'tip-bar show warn';
+      // 存在失败：默认展开提醒
+      bar.className = 'check-panel warn';
       document.getElementById('tipIcon').textContent = '!';
       document.getElementById('tipTitle').textContent = '检测到 '+fail+' 个小模型文件缺失，相关算法将无法正常分析';
-      document.getElementById('tipText').textContent = statText + '缺失模型的小模型在分配给业务算法后不会产生检测结果，请在本页编辑对应小模型、上传或修改模型文件路径。';
+      document.getElementById('tipSummary').textContent = statText;
+      document.getElementById('tipText').textContent = '缺失模型的小模型在分配给业务算法后不会产生检测结果，请在本页编辑对应小模型、上传或修改模型文件路径。';
+      document.getElementById('tipDetail').style.display = 'block';
+      document.getElementById('tipArrow').textContent = '\u25b4';
       showToast('检测到 '+fail+' 个小模型文件缺失，算法可能无法正常分析', 'error');
-    }
-    if(listHtml){
-      list.style.display = 'block';
-      list.innerHTML = listHtml;
-    } else {
-      list.style.display = 'none';
     }
   });
 }
-
 function onTaskTypeChange(){
   var task = document.getElementById('f_task_type').value;
   var isReid = task === 'reid';
@@ -391,7 +435,7 @@ function onTaskTypeChange(){
 }
 
 function typeLabelMap(){
-  return {yolo5:'YOLOv5',yolo8:'YOLOv8',yolo11:'YOLOv11',yolo26:'YOLO26',osnet:'OSNet ReID'};
+  return {yolo5:'YOLOv5',yolo8:'YOLOv8',yolo11:'YOLOv11',yolo26:'YOLO26',osnet:'OSNet ReID',dfine:'D-FINE'};
 }
 
 function onAlgFilterChange(){

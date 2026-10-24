@@ -1,12 +1,12 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 from django.urls import path
 from django.views.generic import RedirectView
 from django.views.decorators.csrf import csrf_exempt
+from django.http import FileResponse
+from pathlib import Path as _FavPath
 from .views import UserView
 from .views import IndexView
 from .views import SystemView
@@ -83,6 +83,16 @@ urlpatterns = [
     path('system/openSaveSettings', SystemView.api_openSaveSettings),
     path('system/settings', RedirectView.as_view(url='/', permanent=False)),
     path('system/openExportLogs', SystemView.api_openExportLogs),
+    path('system/openRestart', SystemView.api_openRestart),
+
+    # 浏览器默认请求的站点图标（每个标签页都要有 ico）
+    # 直接在站点根路径吐出 ico 文件（不走 302）：Chrome/Edge 对 /favicon.ico 有特殊信任，
+    # 且可绕过浏览器对旧地址的 favicon 死缓存
+    path('favicon.ico', lambda r: FileResponse(
+        open(_FavPath(__file__).resolve().parent.parent / 'static' / 'images' / 'favicon.ico', 'rb'),
+        content_type='image/x-icon',
+        headers={'Cache-Control': 'public, max-age=3600'},
+    )),
 
     # NVR/录像
     path('record/index', NvrView.record_index),

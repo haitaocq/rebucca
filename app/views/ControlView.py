@@ -1,9 +1,7 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 """Rebucca · 布控管理 Web 层
 
 页面：
@@ -138,6 +136,7 @@ def _control_to_dict(z):
         "line_a": getattr(z, "line_a", "") or "",
         "line_b": getattr(z, "line_b", "") or "",
         "density_threshold": int(getattr(z, "density_threshold", 0) or 0),
+        "absence_threshold": int(getattr(z, "absence_threshold", 0) or 0),
         "algorithms": algos,
         "algorithm_ids": [a["id"] for a in algos],
         "state": int(getattr(z, "state", 1) or 0),
@@ -409,6 +408,7 @@ def control_openAdd(request):
                     line_a=params.get("line_a", ""),
                     line_b=params.get("line_b", ""),
                     density_threshold=int(params.get("density_threshold", 0) or 0),
+                    absence_threshold=int(params.get("absence_threshold", 0) or 0),
                     state=0,
                 )
                 zone.save()
@@ -471,6 +471,8 @@ def control_openEdit(request):
                     z.line_b = params.get("line_b", "")
                 if "density_threshold" in params:
                     z.density_threshold = int(params.get("density_threshold", 0) or 0)
+                if "absence_threshold" in params:
+                    z.absence_threshold = int(params.get("absence_threshold", 0) or 0)
                 z.save()
                 if "algorithm_ids" in params:
                     algo_ids = params.get("algorithm_ids") or []

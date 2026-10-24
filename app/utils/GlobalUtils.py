@@ -1,9 +1,7 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 import os
 import time
 import json
@@ -356,41 +354,3 @@ class CheckServerUtils():
             g_logger.error("CheckServerUtils.checkVersion() e:%s" % str(e))
 
         return __online, __state, __msg, __info
-
-    @staticmethod
-    def reportHeart(report_count, lang=None):
-        __state = False
-        __msg = LANG_VIEWS_USE_LANG_T(lang, "msg_unknown_error")
-        headers = {
-            "User-Agent": PROJECT_UA,
-            "Content-Type": "application/json;"
-        }
-        try:
-            servicesHost = "http://www.yuturuishi.com"  # 服务地址（不对外）
-            url = "%s/api/rebucca/reportHeart" % servicesHost
-
-            osSystem = OSSystem()
-
-            osInfo = osSystem.getOSInfo()
-
-            data = {
-                "machineMacs": [],
-                "finger": "rebucca",
-                "runInfo": {},
-                "osInfo": str(osInfo),
-                "reportCount": report_count
-            }
-            data_json = json.dumps(data)
-
-            res = requests.post(url=url, headers=headers, data=data_json, timeout=10)
-
-            if res.status_code == 200:
-                res_result = res.json()
-                __msg = res_result["msg"]
-                if res_result["code"] == 1000:
-                    __state = True
-            else:
-                __msg = LANG_VIEWS_USE_LANG_T(lang, "msg_status_code") % res.status_code
-        except Exception as e:
-            __msg = str(e)
-            g_logger.error("CheckServerUtils.reportHeart() e:%s" % str(e))

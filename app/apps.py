@@ -1,9 +1,7 @@
-# 作者：北小菜
 # 官网：https://www.yuturuishi.com
-# 微信：bilibili_bxc
-# 哔哩哔哩主页：https://space.bilibili.com/487906612
-# gitee地址：https://gitee.com/Vanishi/rebucca
-# github地址：https://github.com/beixiaocai/rebucca
+# 微信：yuturuishi
+# gitee开源地址：https://gitee.com/yuturuishi/rebucca
+# github开源地址：https://github.com/yuturuishi/rebucca
 import os
 
 from django.apps import AppConfig
@@ -44,6 +42,34 @@ class AppConfig(AppConfig):
         except Exception as e:
             import logging
             logging.getLogger("app.bootstrap").warning("schema upgrade: %s", e)
+
+        try:
+            from app.utils.schema_upgrade import ensure_zone_absence_threshold_column
+            ensure_zone_absence_threshold_column()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("schema upgrade: %s", e)
+
+        try:
+            from app.utils.seed_defaults import ensure_default_dfine_models
+            ensure_default_dfine_models()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("seed_default_dfine_models: %s", e)
+
+        try:
+            from app.utils.seed_defaults import upgrade_dfine_labels_to_chinese
+            upgrade_dfine_labels_to_chinese()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("upgrade_dfine_labels_to_chinese: %s", e)
+
+        try:
+            from app.utils.seed_defaults import upgrade_dfine_biz_target_labels
+            upgrade_dfine_biz_target_labels()
+        except Exception as e:
+            import logging
+            logging.getLogger("app.bootstrap").warning("upgrade_dfine_biz_target_labels: %s", e)
 
         # 仅在 runserver 的子进程（RUN_MAIN=true）启动后台服务，
         # 避免 reloader 主进程重复初始化 AnalysisManager / 推理池。
