@@ -97,8 +97,10 @@ RUN mkdir -p /app/data/db /app/data/log /app/data/storage /app/data/upload \
     && ln -s /app/data/log /app/log \
     && chown -R 1000:1000 /app/data
 
-# 预置模型权重仅写入数据目录一次（/app/static/upload 软链已指向它）
-COPY --chown=1000:1000 static/upload /app/data/upload
+# 内置资源（模型权重等）放到非挂载路径，入口脚本再同步进数据卷。
+# 原因：/app/data 是命名卷挂载点，已存在的卷会遮蔽镜像内该目录的新增内容，
+# 直接 COPY 到 /app/data/upload 只能对“空卷首次创建”生效，升级时无法补入新模型。
+COPY --chown=1000:1000 static/upload /opt/builtin/upload
 
 COPY docker/entrypoint.sh /usr/local/bin/rebucca-entrypoint
 RUN chmod +x /usr/local/bin/rebucca-entrypoint

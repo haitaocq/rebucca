@@ -16,6 +16,14 @@ fi
 rm -f /app/rebucca.sqlite3
 ln -s "$DATA_DIR/rebucca.sqlite3" /app/rebucca.sqlite3
 
+# 内置资源（模型权重等）同步进数据卷：仅补齐缺失文件，绝不覆盖用户上传。
+# 单卷架构下已有卷会遮蔽镜像内 /app/data/upload 的新增内容，故需在启动时显式同步。
+BUILTIN_UPLOAD=/opt/builtin/upload
+if [ -d "$BUILTIN_UPLOAD" ]; then
+    mkdir -p /app/data/upload
+    cp -an "$BUILTIN_UPLOAD/." /app/data/upload/ 2>/dev/null || true
+fi
+
 # 权限兜底（命名卷首次挂载可能继承 root 属主；软链本身也一并修正）
 chown -h rebucca:rebucca \
     /app/db \

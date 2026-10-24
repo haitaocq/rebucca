@@ -10,7 +10,7 @@ requests==2.28.2
 xlrd==1.2.0
 openpyxl==3.1.2
 onvif_zeep==0.2.12
-pillow==9.5.0
+pillow==10.4.0
 cryptography==46.0.4
 
 # 视频分析（OnnxRuntime 推理；headless 版去掉 GUI/高GUI 依赖，体积更小）

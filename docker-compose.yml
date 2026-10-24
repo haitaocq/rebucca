@@ -11,7 +11,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: rebucca:1.002
+    image: rebucca:1.006
     container_name: rebucca
     restart: unless-stopped
     environment:
